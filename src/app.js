@@ -7,6 +7,7 @@ import { verifyToken } from "./middleware/Auth.js";
 import { uploadprofile, uploadProduct } from "./middleware/Cloudinary.js";
 import { validateOrderInput } from "./validator/orderValidator.js";
 import { httpError } from "./helper/httpError.js";
+import { success } from "zod";
 
 const app = express();
 
@@ -402,6 +403,26 @@ app.post("/api/v1/cart", verifyToken, async (req, res) => {
     });
   }
 });
+
+// Get Cart List
+app.get("/api/v1/cart-list", verifyToken, async (req, res) => {
+  try {
+    const [cart] = await pool.query("SELECT c.cart_id, p.product_name, p.price, d.quantity, (p.price * d.quantity) AS subtotal FROM cart c JOIN cart_detail d ON c.cart_id = d.cart_id JOIN products p ON d.product_id = p.id_product WHERE c.customer_id = ?",
+      [req.user.id]
+    );
+    return res.status(200).json({
+      success: true,
+      message: "Successfuly get cart",
+      cart: cart[0]
+    })
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Failed to get cart list!",
+      error: error.message,
+    });
+  }  
+})
 
 app.listen(3000, () => {
   console.log(`JatiLuxe activated on port 3000`);
