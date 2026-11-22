@@ -5,6 +5,8 @@ import "dotenv/config";
 import { generateAccessToken } from "./helper/token.js";
 import { verifyToken } from "./middleware/Auth.js";
 import { uploadprofile, uploadProduct } from "./middleware/Cloudinary.js";
+import { validateOrderInput } from "./validator/orderValidator.js";
+import { httpError } from "./helper/httpError.js";
 
 const app = express();
 
@@ -209,7 +211,7 @@ app.put("/api/v1/profile", verifyToken, uploadprofile.single("profile"),async (r
 // Get All Product
 app.get("/api/v1/products", verifyToken, async (req, res) => {
   try {
-    const [products] = await pool.query("SELECT p.id_product, c.category, u.nama, p.product_name, p.wood_type, p.description, p.picture FROM products p JOIN categories c ON c.id_category = p.id_category JOIN users u ON u.id_user = p.id_user")
+    const [products] = await pool.query("SELECT p.id_product, c.category, u.nama, p.product_name, p.wood_type, p.price, p.stock, p.description, p.picture FROM products p JOIN categories c ON c.id_category = p.id_category JOIN users u ON u.id_user = p.id_user;")
     if (!products.length) {
       return res.status(404).json({ error: "Product is empty" });
     }
@@ -229,7 +231,7 @@ app.get("/api/v1/products", verifyToken, async (req, res) => {
 // Get A Specific Product
 app.get("/api/v1/product/:id", verifyToken, async (req, res) => {
   try {
-    const [product] = await pool.query("SELECT p.id_product, c.category, u.nama, p.product_name, p.wood_type, p.description, p.picture FROM products p JOIN categories c ON c.id_category = p.id_category JOIN users u ON u.id_user = p.id_user WHERE p.id_product = ?",
+    const [product] = await pool.query("SELECT p.id_product, c.category, u.nama, p.product_name, p.wood_type, p.price, p.stock, p.description, p.picture FROM products p JOIN categories c ON c.id_category = p.id_category JOIN users u ON u.id_user = p.id_user WHERE p.id_product = ?;",
       [req.params.id]
     );if (!product.length) {
       return res.status(404).json({
@@ -286,9 +288,119 @@ app.post("/api/v1/product", verifyToken, uploadProduct.single("picture"), async 
 
 //  ========================= Order =========================
 
-// Order A Prouct
-app.post("/api/v1/order", async (req, res) => {
-  const [rows] = await pool.query("")
+// Order A Product
+app.post("/api/v1/order", verifyToken, async (req, res) => {
+   const money = (value) => Math.round(Number(value) * 100) / 100;
+  const orderDate = new Date();
+  let conn;
+
+  try {
+    const { items } = validateOrderInput(req.body);
+    const ids = items.map((item) => item.id_product);
+
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [products] = await conn.execute(
+      `SELECT id_product, price, stock FROM products
+       WHERE id_product IN (${ids.map(() => "?").join(", ")}) FOR UPDATE`,
+      ids,
+    );
+    const byId = new Map(products.map((product) => [product.id_product, product]));
+
+    // satu loop: cek produk + stok SEKALIGUS hitung subtotal
+    const orderItems = items.map(({ id_product, quantity }) => {
+      const product = byId.get(id_product);
+      if (!product) throw httpError(404, `Produk ${id_product} tidak ditemukan`);
+      if (Number(product.stock) < quantity) {
+        throw httpError(409, `Stok produk ${id_product} tidak cukup`, {
+          id_product, tersedia: Number(product.stock), diminta: quantity,
+        });
+      }
+      return { id_product, quantity, subtotal: money(Number(product.price) * quantity) };
+    });
+    const total = money(orderItems.reduce((sum, item) => sum + item.subtotal, 0));
+
+    const [inserted] = await conn.execute(
+      "INSERT INTO orders (id_customer, order_date, total_price) VALUES (?, ?, ?)",
+      [req.user.id, orderDate, total],
+    );
+    const idOrder = inserted.insertId;
+
+    // batch insert detail (1 query, bukan N query)
+    const placeholders = orderItems.map(() => "(?, ?, ?, ?)").join(", ");
+    const values = orderItems.flatMap((item) => [
+      idOrder, item.id_product, item.quantity, item.subtotal,
+    ]);
+    await conn.execute(
+      `INSERT INTO order_detail (id_order, id_product, quantity, subtotal) VALUES ${placeholders}`,
+      values,
+    );
+
+    for (const item of orderItems) {
+      await conn.execute(
+        "UPDATE products SET stock = stock - ? WHERE id_product = ?",
+        [item.quantity, item.id_product],
+      );
+    }
+    await conn.commit();
+
+    return res.status(201).json({
+      success: true,
+      message: "Order berhasil dibuat",
+      order: { id_order: idOrder, order_date: orderDate, total_price: total, items: orderItems },
+    });
+  } catch (error) {
+    if (conn) await conn.rollback().catch(() => {});
+    const status = error.status ?? (["ER_LOCK_DEADLOCK", "ER_LOCK_WAIT_TIMEOUT"].includes(error.code) ? 409 : 500);
+    if (status === 500) console.error("Gagal membuat order:", error);
+    return res.status(status).json({
+      success: false,
+      message: status === 500 ? "Terjadi kesalahan server" : error.message,
+      ...(error.details ? { details: error.details } : {}),
+    });
+  } finally {
+    conn?.release();
+  }
+});
+
+// Add Product To Cart
+app.post("/api/v1/cart", verifyToken, async (req, res) => {
+  try {
+    const { product_id, quantity } = req.body;
+
+    const [existing] = await pool.execute(
+    "SELECT cart_id FROM cart WHERE customer_id = ?",
+    [req.user.id],
+  );
+
+   let cartId;
+
+  if (existing.length > 0) {
+    cartId = existing[0].cart_id;
+  } else {
+    const [created] = await pool.execute(
+      "INSERT INTO cart(customer_id) VALUES (?)",
+      [req.user.id],
+    );
+    cartId = created.insertId;
+  }
+    const [detail] = await pool.query("INSERT INTO cart_detail(cart_id, product_id, quantity) values (?, ?, ?)",
+      [cartId, product_id, quantity]
+    );
+    return res.status(201).json({
+      success: true,
+      message: "Product successfuly added to cart",
+      cart: cartId,
+      detail: detail[0]
+    })
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: "Failed to add product to cart!",
+      error: error.message,
+    });
+  }
 });
 
 app.listen(3000, () => {
