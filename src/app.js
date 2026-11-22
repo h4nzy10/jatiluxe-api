@@ -422,7 +422,106 @@ app.get("/api/v1/cart-list", verifyToken, async (req, res) => {
       error: error.message,
     });
   }  
-})
+});
+
+// Make Order From Cart
+app.post("/api/v1/order/partial", verifyToken, async (req, res) => {
+  const money = (value) => Math.round(Number(value) * 100) / 100;
+  const orderDate = new Date();
+  let conn;
+
+  try {
+    const { selected_cart_ids } = req.body; 
+    if (!selected_cart_ids || !selected_cart_ids.length) {
+      throw httpError(400, "Tidak ada item yang dipilih untuk checkout");
+    }
+    const cleanCartIds = selected_cart_ids.filter((id) => id !== undefined && id !== null);
+    if (cleanCartIds.length !== selected_cart_ids.length) {
+      throw httpError(400, "Terdapat ID keranjang yang tidak valid (undefined/null)");
+    }
+
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const placeholders = selected_cart_ids.map(() => "?").join(", ");
+    const [cartItems] = await conn.execute(
+      `SELECT ci.cart_detail_id, ci.product_id, ci.quantity, p.price, p.stock 
+       FROM cart_detail ci
+       JOIN products p ON ci.product_id = p.id_product
+       JOIN cart c ON c.cart_id = ci.cart_id
+       WHERE c.customer_id = ? AND ci.cart_detail_id IN (${placeholders})`,
+      [req.user.id, ...selected_cart_ids]
+    );
+    console.log("Hasil dari database:", cartItems);
+
+    if (cartItems.length !== selected_cart_ids.length) {
+      throw httpError(400, "Beberapa item di keranjang tidak valid atau sudah tidak ada");
+    }
+
+    const orderItems = cartItems.map((item) => {
+      if (Number(item.stock) < item.quantity) {
+        throw httpError(409, `Product stock is ${item.product_id}, not enough`, {
+          id_product: item.product_id, tersedia: Number(item.stock), diminta: item.quantity,
+        });
+      }
+      return {
+        id_product: item.product_id,
+        quantity: item.quantity,
+        subtotal: money(Number(item.price) * item.quantity),
+      };
+    });
+    console.log(orderItems);
+    
+    
+    const total = money(orderItems.reduce((sum, item) => sum + item.subtotal, 0));
+
+    const [inserted] = await conn.execute(
+      "INSERT INTO orders (id_customer, order_date, total_price) VALUES (?, ?, ?)",
+      [req.user.id, orderDate, total]
+    );
+    const idOrder = inserted.insertId;
+
+    const detailPlaceholders = orderItems.map(() => "(?, ?, ?, ?)").join(", ");
+    const values = orderItems.flatMap((item) => [idOrder, item.id_product, item.quantity, item.subtotal]);
+    console.log(values);
+    await conn.execute(
+      `INSERT INTO order_detail (id_order, id_product, quantity, subtotal) VALUES ${detailPlaceholders}`,
+      values
+    );
+
+    for (const item of orderItems) {
+      await conn.execute(
+        "UPDATE products SET stock = stock - ? WHERE id_product = ?",
+        [item.quantity, item.id_product]
+      );
+    }
+
+    await conn.execute(
+      `DELETE cd FROM cart_detail cd JOIN cart c ON c.cart_id = cd.cart_id WHERE c.customer_id = ? AND cd.cart_detail_id IN (${placeholders})`,
+      [req.user.id, ...selected_cart_ids]
+    );
+
+    await conn.commit();
+
+    return res.status(201).json({
+      success: true,
+      message: "Order successfuly created",
+      order: { id_order: idOrder, order_date: orderDate, total_price: total, items: orderItems },
+    });
+
+  } catch (error) {
+    if (conn) await conn.rollback().catch(() => {});
+    const status = error.status ?? 500;
+    if (status === 500) console.error("Fail to create order:", error);
+    return res.status(status).json({
+      success: false,
+      message: status === 500 ? "Server Error" : error.message,
+      ...(error.details ? { details: error.details } : {}),
+    });
+  } finally {
+    conn?.release();
+  }
+});
 
 app.listen(3000, () => {
   console.log(`JatiLuxe activated on port 3000`);
