@@ -387,20 +387,31 @@ app.post("/api/v1/order", verifyToken, async (req, res) => {
         [item.quantity, item.id_product],
       );
     }
+
+     const [paymentInserted] = await conn.execute(
+      `INSERT INTO payments (id_order, pay_date, payment_method, payment_status)
+       VALUES (?, NULL, NULL, 'pending')`,
+      [idOrder]);
+
     await conn.commit();
 
     return res.status(201).json({
       success: true,
       message: "Order berhasil dibuat",
       order: { id_order: idOrder, order_date: orderDate, total_price: total, items: orderItems },
+      payment: {
+        id_payment: paymentInserted.insertId,
+        id_order: idOrder,
+        payment_status: "Waiting for payment"
+      }
     });
   } catch (error) {
     if (conn) await conn.rollback().catch(() => {});
     const status = error.status ?? (["ER_LOCK_DEADLOCK", "ER_LOCK_WAIT_TIMEOUT"].includes(error.code) ? 409 : 500);
-    if (status === 500) console.error("Gagal membuat order:", error);
+    if (status === 500) console.error("Failed to create order:", error);
     return res.status(status).json({
       success: false,
-      message: status === 500 ? "Terjadi kesalahan server" : error.message,
+      message: status === 500 ? "Server error" : error.message,
       ...(error.details ? { details: error.details } : {}),
     });
   } finally {
@@ -436,17 +447,14 @@ app.post("/api/v1/order/partial", verifyToken, async (req, res) => {
        WHERE c.customer_id = ? AND ci.cart_detail_id IN (${placeholders})`,
       [req.user.id, ...selected_cart_ids]
     );
-    console.log("Hasil dari database:", cartItems);
 
     if (cartItems.length !== selected_cart_ids.length) {
-      throw httpError(400, "Beberapa item di keranjang tidak valid atau sudah tidak ada");
+      return res.status(400).json({message: "Some products on your cart is not found"})
     }
 
     const orderItems = cartItems.map((item) => {
       if (Number(item.stock) < item.quantity) {
-        throw httpError(409, `Product stock is ${item.product_id}, not enough`, {
-          id_product: item.product_id, tersedia: Number(item.stock), diminta: item.quantity,
-        });
+        return res.status(409).json({message: "Product stock is not enough or out of stock"})
       }
       return {
         id_product: item.product_id,
@@ -454,8 +462,6 @@ app.post("/api/v1/order/partial", verifyToken, async (req, res) => {
         subtotal: money(Number(item.price) * item.quantity),
       };
     });
-    console.log(orderItems);
-    
     
     const total = money(orderItems.reduce((sum, item) => sum + item.subtotal, 0));
 
@@ -467,18 +473,28 @@ app.post("/api/v1/order/partial", verifyToken, async (req, res) => {
 
     const detailPlaceholders = orderItems.map(() => "(?, ?, ?, ?)").join(", ");
     const values = orderItems.flatMap((item) => [idOrder, item.id_product, item.quantity, item.subtotal]);
-    console.log(values);
     await conn.execute(
       `INSERT INTO order_detail (id_order, id_product, quantity, subtotal) VALUES ${detailPlaceholders}`,
       values
     );
 
-    for (const item of orderItems) {
+     for (const item of orderItems) {
       await conn.execute(
         "UPDATE products SET stock = stock - ? WHERE id_product = ?",
         [item.quantity, item.id_product]
       );
     }
+
+    await conn.execute(
+      `DELETE cd FROM cart_detail cd JOIN cart c ON c.cart_id = cd.cart_id WHERE c.customer_id = ? AND cd.cart_detail_id IN (${placeholders})`,
+      [req.user.id, ...selected_cart_ids]
+    );
+
+    const [paymentInserted] = await conn.execute(
+      `INSERT INTO payments (id_order, pay_date, payment_method, payment_status)
+       VALUES (?, NULL, NULL, 'pending')`,
+      [idOrder]
+    );
 
     await conn.execute(
       `DELETE cd FROM cart_detail cd JOIN cart c ON c.cart_id = cd.cart_id WHERE c.customer_id = ? AND cd.cart_detail_id IN (${placeholders})`,
@@ -491,6 +507,11 @@ app.post("/api/v1/order/partial", verifyToken, async (req, res) => {
       success: true,
       message: "Order successfuly created",
       order: { id_order: idOrder, order_date: orderDate, total_price: total, items: orderItems },
+      payment: {
+        id_payment: paymentInserted.insertId,
+        id_order: idOrder,
+        payment_status: "Waiting for payment"
+      }
     });
 
   } catch (error) {
