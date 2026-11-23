@@ -6,8 +6,6 @@ import { generateAccessToken } from "./helper/token.js";
 import { verifyToken } from "./middleware/Auth.js";
 import { uploadprofile, uploadProduct } from "./middleware/Cloudinary.js";
 import { validateOrderInput } from "./validator/orderValidator.js";
-import { httpError } from "./helper/httpError.js";
-import { success } from "zod";
 
 const app = express();
 
@@ -55,11 +53,8 @@ app.post("/api/v1/register", async (req, res) => {
         req.body.alamat,
       ],
     );
-    const token = generateAccessToken({ id: rows.insertId });
-
     res.status(201).json({
-      message: "Register success!",
-      token: token,
+      message: "Register success! You can login",
     });
   } catch (error) {
     console.log(error);
@@ -84,11 +79,7 @@ app.post("/api/v1/register/seller", async (req, res) => {
 // ========================= User & Profile =========================
 
 // Add Profile Picture
-app.post(
-  "/api/v1/profile-picture",
-  verifyToken,
-  uploadprofile.single("profile"),
-  async (req, res) => {
+app.post("/api/v1/profile-picture", verifyToken, uploadprofile.single("profile"), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({
@@ -218,7 +209,7 @@ app.get("/api/v1/products", verifyToken, async (req, res) => {
     }
     return res.status(200).json({
       message: "successfuly get products",
-      user: products[0],
+      products: products,
     });
   } catch (error) {
     console.error("Failed to get products:", error);
@@ -262,108 +253,27 @@ app.post("/api/v1/product", verifyToken, uploadProduct.single("picture"), async 
         message: "No file uploaded or invalid file format!",
       });
     }
-    const profileUrl = req.file.path || req.file.url;
+    const picture = req.file.path || req.file.url;
 
     const [result] = await pool.query(
-      "UPDATE users SET profile = ? WHERE id_user = ?",
-      [profileUrl, req.user.id],
+      "INSERT INTO products(id_category, id_user, product_name, wood_type, price, description, picture, stock) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [req.body.id_category, req.user.id, req.body.product_name, req.body.wood_type, req.body.price, req.body.description, picture, req.body.stock],
     );
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        message: "User not found!",
-      });
-    }
     res.status(200).json({
-      message: "Profile picture successfully uploaded!",
-      profile_picture: profileUrl,
+      message: "Product successfuly created!",
+      inserted_product: result[0],
     });
   } catch (error) {
     console.error(error);
     res.status(500).json({
-      message: "Failed to update profile picture!",
+      message: "Failed to make product!",
       error: error.message,
     });
   }
 });
 
-//  ========================= Order =========================
-
-// Order A Product
-app.post("/api/v1/order", verifyToken, async (req, res) => {
-   const money = (value) => Math.round(Number(value) * 100) / 100;
-  const orderDate = new Date();
-  let conn;
-
-  try {
-    const { items } = validateOrderInput(req.body);
-    const ids = items.map((item) => item.id_product);
-
-    conn = await pool.getConnection();
-    await conn.beginTransaction();
-
-    const [products] = await conn.execute(
-      `SELECT id_product, price, stock FROM products
-       WHERE id_product IN (${ids.map(() => "?").join(", ")}) FOR UPDATE`,
-      ids,
-    );
-    const byId = new Map(products.map((product) => [product.id_product, product]));
-
-    // satu loop: cek produk + stok SEKALIGUS hitung subtotal
-    const orderItems = items.map(({ id_product, quantity }) => {
-      const product = byId.get(id_product);
-      if (!product) throw httpError(404, `Produk ${id_product} tidak ditemukan`);
-      if (Number(product.stock) < quantity) {
-        throw httpError(409, `Stok produk ${id_product} tidak cukup`, {
-          id_product, tersedia: Number(product.stock), diminta: quantity,
-        });
-      }
-      return { id_product, quantity, subtotal: money(Number(product.price) * quantity) };
-    });
-    const total = money(orderItems.reduce((sum, item) => sum + item.subtotal, 0));
-
-    const [inserted] = await conn.execute(
-      "INSERT INTO orders (id_customer, order_date, total_price) VALUES (?, ?, ?)",
-      [req.user.id, orderDate, total],
-    );
-    const idOrder = inserted.insertId;
-
-    // batch insert detail (1 query, bukan N query)
-    const placeholders = orderItems.map(() => "(?, ?, ?, ?)").join(", ");
-    const values = orderItems.flatMap((item) => [
-      idOrder, item.id_product, item.quantity, item.subtotal,
-    ]);
-    await conn.execute(
-      `INSERT INTO order_detail (id_order, id_product, quantity, subtotal) VALUES ${placeholders}`,
-      values,
-    );
-
-    for (const item of orderItems) {
-      await conn.execute(
-        "UPDATE products SET stock = stock - ? WHERE id_product = ?",
-        [item.quantity, item.id_product],
-      );
-    }
-    await conn.commit();
-
-    return res.status(201).json({
-      success: true,
-      message: "Order berhasil dibuat",
-      order: { id_order: idOrder, order_date: orderDate, total_price: total, items: orderItems },
-    });
-  } catch (error) {
-    if (conn) await conn.rollback().catch(() => {});
-    const status = error.status ?? (["ER_LOCK_DEADLOCK", "ER_LOCK_WAIT_TIMEOUT"].includes(error.code) ? 409 : 500);
-    if (status === 500) console.error("Gagal membuat order:", error);
-    return res.status(status).json({
-      success: false,
-      message: status === 500 ? "Terjadi kesalahan server" : error.message,
-      ...(error.details ? { details: error.details } : {}),
-    });
-  } finally {
-    conn?.release();
-  }
-});
+//  ========================= Cart =========================
 
 // Add Product To Cart
 app.post("/api/v1/cart", verifyToken, async (req, res) => {
@@ -413,7 +323,7 @@ app.get("/api/v1/cart-list", verifyToken, async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Successfuly get cart",
-      cart: cart[0]
+      cart: cart
     })
   } catch (error) {
     console.error(error);
@@ -422,6 +332,80 @@ app.get("/api/v1/cart-list", verifyToken, async (req, res) => {
       error: error.message,
     });
   }  
+});
+
+//  ========================= Order =========================
+
+// Order A Product
+app.post("/api/v1/order", verifyToken, async (req, res) => {
+   const money = (value) => Math.round(Number(value) * 100) / 100;
+  const orderDate = new Date();
+  let conn;
+
+  try {
+    const { items } = validateOrderInput(req.body);
+    const ids = items.map((item) => item.id_product);
+
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [products] = await conn.execute(
+      `SELECT id_product, price, stock FROM products
+       WHERE id_product IN (${ids.map(() => "?").join(", ")}) FOR UPDATE`,
+      ids,
+    );
+    const byId = new Map(products.map((product) => [product.id_product, product]));
+
+    const orderItems = items.map(({ id_product, quantity }) => {
+      const product = byId.get(id_product);
+      if (!product) return res.status(404).json({message: "Product not found"})
+      if (Number(product.stock) < quantity) {
+        return res.status(409).json({message: "Product stock is not enough or empty"})
+      }
+      return { id_product, quantity, subtotal: money(Number(product.price) * quantity) };
+    });
+    const total = money(orderItems.reduce((sum, item) => sum + item.subtotal, 0));
+
+    const [inserted] = await conn.execute(
+      "INSERT INTO orders (id_customer, order_date, total_price) VALUES (?, ?, ?)",
+      [req.user.id, orderDate, total],
+    );
+    const idOrder = inserted.insertId;
+
+    const placeholders = orderItems.map(() => "(?, ?, ?, ?)").join(", ");
+    const values = orderItems.flatMap((item) => [
+      idOrder, item.id_product, item.quantity, item.subtotal,
+    ]);
+    await conn.execute(
+      `INSERT INTO order_detail (id_order, id_product, quantity, subtotal) VALUES ${placeholders}`,
+      values,
+    );
+
+    for (const item of orderItems) {
+      await conn.execute(
+        "UPDATE products SET stock = stock - ? WHERE id_product = ?",
+        [item.quantity, item.id_product],
+      );
+    }
+    await conn.commit();
+
+    return res.status(201).json({
+      success: true,
+      message: "Order berhasil dibuat",
+      order: { id_order: idOrder, order_date: orderDate, total_price: total, items: orderItems },
+    });
+  } catch (error) {
+    if (conn) await conn.rollback().catch(() => {});
+    const status = error.status ?? (["ER_LOCK_DEADLOCK", "ER_LOCK_WAIT_TIMEOUT"].includes(error.code) ? 409 : 500);
+    if (status === 500) console.error("Gagal membuat order:", error);
+    return res.status(status).json({
+      success: false,
+      message: status === 500 ? "Terjadi kesalahan server" : error.message,
+      ...(error.details ? { details: error.details } : {}),
+    });
+  } finally {
+    conn?.release();
+  }
 });
 
 // Make Order From Cart
@@ -518,6 +502,85 @@ app.post("/api/v1/order/partial", verifyToken, async (req, res) => {
       message: status === 500 ? "Server Error" : error.message,
       ...(error.details ? { details: error.details } : {}),
     });
+  } finally {
+    conn?.release();
+  }
+});
+
+// Transaction
+app.post("/api/v1/payments", verifyToken, async (req, res) => {
+  const idOrder = Number(req.body.id_order);
+  if (!Number.isInteger(idOrder) || idOrder <= 0) {
+    return res.status(400).json({ message: "Invalid Order" });
+  }
+  let conn;
+
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [rows] = await conn.execute(
+      `SELECT p.id_payment, p.id_order, p.payment_status, p.pay_date, p.payment_method,
+              o.id_customer, o.total_price
+       FROM payment p
+       JOIN orders o ON o.id_order = p.id_order
+       WHERE p.id_order = ?
+       FOR UPDATE`,
+      [idOrder]
+    );
+
+    if (!rows.length) {
+      await conn.rollback();
+      return res.status(404).json({ message: "Payment not found!" });
+    }
+
+    const payment = rows[0];
+
+    if (Number(payment.id_customer) !== Number(req.user.id)) {
+      await conn.rollback();
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    if (payment.payment_status === "Paid off") {
+      await conn.rollback();
+      return res.status(409).json({
+        message: "Succcessfuly",
+        payment: { id_payment: payment.id_payment, id_order: payment.id_order, payment_status: payment.payment_status }
+      });
+    }
+
+    if (payment.payment_status !== "Waiting for payment") {
+      await conn.rollback();
+      return res.status(409).json({ message: `Cannot proccess payment: ${payment.payment_status}` });
+    }
+
+    const [result] = await conn.execute(
+      `UPDATE payments
+       SET payment_status = 'Paid off', payment_method = '?', pay_date = NOW()
+       WHERE id_payment = ? AND payment_status = 'Waiting for payment'`,
+      [payment.id_payment, req.body.payment_method]
+    );
+
+    if (result.affectedRows !== 1) {
+      await conn.rollback();
+      return res.status(409).json({ message: "Payment status has changed!" });
+    }
+
+    await conn.commit();
+    return res.status(200).json({
+      success: true,
+      message: "Payment Proccessed Succesfully",
+      payment: {
+        id_payment: payment.id_payment,
+        id_order: payment.id_order,
+        payment_status: "Paid off",
+        payment_method: req.body.payment_method
+      }
+    });
+  } catch (error) {
+    if (conn) await conn.rollback().catch(() => {});
+    console.error(error);
+    return res.status(500).json({ message: "Server error" });
   } finally {
     conn?.release();
   }
