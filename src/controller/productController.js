@@ -53,18 +53,10 @@ export async function AddProduct(req, res) {
     }
     const picture = req.file.path || req.file.url;
 
+    const { id_category, product_name, wood_type, price, description, stock } = req.body;
     const [result] = await pool.query(
       "INSERT INTO products(id_category, id_user, product_name, wood_type, price, description, picture, stock) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      [
-        req.body.id_category,
-        req.user.id,
-        req.body.product_name,
-        req.body.wood_type,
-        req.body.price,
-        req.body.description,
-        picture,
-        req.body.stock,
-      ],
+      [id_category, req.user.id, product_name, wood_type, price, description, picture, stock,],
     );
 
     res.status(200).json({
@@ -87,8 +79,8 @@ export async function EditProduct(req, res) {
         message: "No file uploaded or invalid file format!",
       });
     }
-    const { category, product_name, wood_type, price, description, stock } = req.body
-    const { picture } = req.file.path || req.file.url;
+    const { category, product_name, wood_type, price, description, stock } = req.body;
+    const picture = req.file.path || req.file.url;
     const [rows] = await pool.query(
       "UPDATE products SET id_category = ?, product_name = ?, wood_type = ?, price = ?, description = ?, picture = ?, stock = ? WHERE id_product = ?",
       [category, product_name, wood_type, price, description, picture, stock, req.params.id]

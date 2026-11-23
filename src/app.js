@@ -307,7 +307,8 @@ app.post("/api/v1/order/partial", verifyToken, async (req, res) => {
 
 // Transaction
 app.post("/api/v1/payments", verifyToken, async (req, res) => {
-  const idOrder = Number(req.body.id_order);
+  const { id_order, payment_method } = req.body;
+  const idOrder = Number(id_order);
   if (!Number.isInteger(idOrder) || idOrder <= 0) {
     return res.status(400).json({ message: "Invalid Order" });
   }
@@ -356,7 +357,7 @@ app.post("/api/v1/payments", verifyToken, async (req, res) => {
       `UPDATE payments
        SET payment_status = 'Paid off', payment_method = '?', pay_date = NOW()
        WHERE id_payment = ? AND payment_status = 'Waiting for payment'`,
-      [payment.id_payment, req.body.payment_method]
+      [payment.id_payment, payment_method]
     );
 
     if (result.affectedRows !== 1) {
@@ -372,7 +373,7 @@ app.post("/api/v1/payments", verifyToken, async (req, res) => {
         id_payment: payment.id_payment,
         id_order: payment.id_order,
         payment_status: "Paid off",
-        payment_method: req.body.payment_method
+        payment_method: payment_method
       }
     });
   } catch (error) {

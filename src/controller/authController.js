@@ -2,9 +2,10 @@ import { generateAccessToken } from "../helper/token";
 
 export async function Login(req, res) {
   try {
+    const { email, password } = req.body;
     const [user] = await pool.query(
       "SELECT * FROM users WHERE email = ? AND password = ?;",
-      [req.body.email, req.body.password],
+      [email, password],
     );
 
     if (!user.length) {
@@ -27,14 +28,15 @@ export async function Login(req, res) {
 
 export async function Register(req, res) {
   try {
+    const { nama, email, password, no_hp, alamat } = req.body;
     const [rows] = await pool.execute(
       "INSERT INTO users (nama, email, password, no_hp, alamat) VALUES (?, ?, ?, ?, ?)",
       [
-        req.body.nama,
-        req.body.email,
-        req.body.password,
-        req.body.no_hp,
-        req.body.alamat,
+        nama,
+        email,
+        password,
+        no_hp,
+        alamat,
       ],
     );
     res.status(201).json({
@@ -48,14 +50,15 @@ export async function Register(req, res) {
 
 export async function RegisterAsSeller(req, res) {
   try {
+    const { nama, email, password, no_hp, alamat } = req.body;
     const [seller] = await pool.query(
       "INSERT INTO users (nama, email, password, role, no_hp, alamat) VALUES (?, ?, ?, 2, ?, ?)",
       [
-        req.body.nama,
-        req.body.email,
-        req.body.password,
-        req.body.no_hp,
-        req.body.alamat,
+        nama,
+        email,
+        password,
+        no_hp,
+        alamat,
       ],
     );
     res.status(201).json({
