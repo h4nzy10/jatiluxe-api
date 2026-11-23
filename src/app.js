@@ -4,7 +4,7 @@ import cors from "cors";
 import "dotenv/config";
 import { verifyToken } from "./middleware/Auth.js";
 import { uploadprofile, uploadProduct } from "./middleware/Cloudinary.js";
-import { validateOrderInput } from "./validator/orderValidator.js";
+import { Schema, validate, validateOrderInput } from "./validator/Validator.js";
 import { Login, Register, RegisterAsSeller } from "./controller/authController.js";
 import { GetProfile } from "./controller/UserProfileController.js";
 
@@ -16,26 +16,24 @@ app.use(cors());
 // ========================= Authentication =========================
 
 // login
-app.post("/api/v1/login", Login);
+app.post("/api/v1/login", validate(Schema.login), Login);
 
 // Register
-app.post("/api/v1/register", Register);
+app.post("/api/v1/register", validate(Schema.register),Register);
 
 // Register As Seller
-app.post("/api/v1/register/seller", RegisterAsSeller);
+app.post("/api/v1/register/seller", validate(Schema.register),RegisterAsSeller);
 
 // ========================= User & Profile =========================
 
 // Add Profile Picture
-app.post("/api/v1/profile-picture", verifyToken, uploadprofile.single("profile"), AddProfile);
+app.post("/api/v1/profile-picture", verifyToken, uploadprofile.single("profile"), validate(Schema.profile), AddProfile);
 
 // Get A Profile
 app.get("/api/v1/profile", verifyToken, GetProfile);
 
 // Update Profile
-app.put("/api/v1/profile", verifyToken, uploadprofile.single("profile"),async (req, res) => {
-  
-});
+app.put("/api/v1/profile", verifyToken, uploadprofile.single("profile"), )
 
 //  ========================= Product =========================
 
