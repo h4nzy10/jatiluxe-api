@@ -59,36 +59,29 @@ export async function EditProfile(req, res) {
   let fields = [];
   let values = [];
 
-  if (nama !== undefined && nama !== "") {
+  if (nama !== undefined) {
     fields.push("nama = ?");
     values.push(nama);
   }
-  if (email !== undefined && email !== "") {
+  if (email !== undefined) {
     fields.push("email = ?");
     values.push(email);
   }
-  if (password !== undefined && password !== "") {
+  if (password !== undefined) {
     fields.push("password = ?");
     values.push(password);
   }
-  if (no_hp !== undefined && no_hp !== "") {
+  if (no_hp !== undefined) {
     fields.push("no_hp = ?");
     values.push(no_hp);
   }
-  if (alamat !== undefined && alamat !== "") {
+  if (alamat !== undefined) {
     fields.push("alamat = ?");
     values.push(alamat);
   }
-  if (profile !== undefined && profile !== "") {
+  if (profile !== undefined) {
     fields.push("profile = ?");
     values.push(profile);
-  }
-
-  if (fields.length === 0) {
-    return res.status(400).json({
-      success: false,
-      message: "You need to update at least 1 fields.",
-    });
   }
   values.push(userId);
   try {

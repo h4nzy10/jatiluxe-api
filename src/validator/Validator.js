@@ -39,7 +39,7 @@ export const Schema = {
     no_hp: requiredString("no_hp"),
     alamat: requiredString("alamat"),
   }),
-  addProduct: z.object({
+  product: z.object({
     id_category: z.coerce.number().int().positive(),
     product_name: requiredString("product name"),
     wood_type: requiredString("wood type"),
