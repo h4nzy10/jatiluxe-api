@@ -1,3 +1,5 @@
+import pool from "../config/config.js"
+
 export async function GetProducts(req, res) {
   try {
     const [products] = await pool.query(
@@ -93,6 +95,34 @@ export async function EditProduct(req, res) {
     res.status(500).json({
       message: "Failed to edit product!",
       error: error.message,
+    });
+  }
+}
+
+export async function DeleteProduct(req, res) {
+  try {
+    const { id } = req.params;
+    const [result] = await pool.execute(
+      "DELETE FROM products WHERE id_product = ?",
+      [id],
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found!",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Product successfully deleted!",
+    });
+  } catch (error) {
+    console.error("Failed to delete product:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error.",
     });
   }
 }

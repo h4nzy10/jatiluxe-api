@@ -13,7 +13,9 @@ const orderItemSchema = z.object({
 });
 
 export const Schema = {
-  orderItem,
+  orderItem: z.object({
+    items: z.array(orderItemSchema).min(1).max(50),
+  }),
   order: z.object({
     items: z.array(orderItemSchema).min(1).max(50),
   }),

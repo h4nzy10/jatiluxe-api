@@ -1,3 +1,5 @@
+import pool from "../config/config.js"
+
 export async function AddProfile(req, res) {
   try {
     if (!req.file) {

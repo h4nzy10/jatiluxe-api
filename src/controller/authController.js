@@ -1,4 +1,5 @@
-import { generateAccessToken } from "../helper/token";
+import { generateAccessToken } from "../helper/token.js";
+import pool from "../config/config.js"
 
 export async function Login(req, res) {
   try {
