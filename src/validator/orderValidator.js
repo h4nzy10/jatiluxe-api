@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { httpError } from "../helper/httpError.js";
 
 const orderItemSchema = z.object({
   id_product: z.number().int().positive(),
@@ -14,10 +13,8 @@ export function validateOrderInput(body) {
   const result = orderSchema.safeParse(body);
 
   if (!result.success) {
-    throw httpError(400, "Order payload invalid", result.error.issues.map((issue) => ({
-      path: issue.path.join("."),
-      message: issue.message,
-    })));
+    console.error(result.error)
+    return res.status(400).json({message: "Invalid order payload"})
   }
 
   const merged = new Map();
@@ -27,7 +24,7 @@ export function validateOrderInput(body) {
 
   for (const [id_product, quantity] of merged) {
     if (quantity > 1000) {
-      throw httpError(400, "Max quantity is 1000!", { id_product, quantity });
+      return res.status(400).json({message: "Max quantity is 1000!"})
     }
   }
 
