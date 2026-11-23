@@ -10,7 +10,7 @@ import { AddProfile, EditProfile, GetProfile } from "./controller/UserProfileCon
 import { AddProduct, DeleteProduct, EditProduct, GetAProduct, GetProducts, GetSellerProducts } from "./controller/productController.js";
 import { AddToCart, GetCartList } from "./controller/cartController.js";
 import { CancelOrder, CreateOrder, CreateOrderFromCart } from "./controller/orderController.js";
-import { Payment } from "./controller/paymentController.js";
+import { CancelPayment, GetSales, GetTransactionDetail, Payment } from "./controller/paymentController.js";
 import { sellerMiddleware } from "./middleware/sellerMiddleware.js";
 import { GetDeliveryTracking, GetDeliveryTrackingByOrder } from "./controller/deliveryController.js";
 
@@ -81,8 +81,17 @@ app.post("/api/v1/order/partial", verifyToken, CreateOrderFromCart);
 app.put("/api/v1/order/:id/cancel", verifyToken, CancelOrder);
 
 //  ========================= Transaction =========================
-
+// Doing Transaction
 app.put("/api/v1/payments", verifyToken, Payment);
+
+// Cancel The Transaction
+app.put("/api/v1/payments/:id/cancel", verifyToken, CancelPayment);
+
+// Get Transaction Detail
+app.get("/api/v1/payments/:id", verifyToken, GetTransactionDetail);
+
+// Get Sales
+app.get("/api/v1/sales", verifyToken, sellerMiddleware, GetSales);
 
 //  ========================= Delivery =========================
 
