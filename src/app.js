@@ -7,11 +7,12 @@ import { uploadprofile, uploadProduct } from "./middleware/Cloudinary.js";
 import { Schema, validate } from "./validator/Validator.js";
 import { Login, Register, RegisterAsSeller } from "./controller/authController.js";
 import { AddProfile, EditProfile, GetProfile } from "./controller/UserProfileController.js";
-import { AddProduct, DeleteProduct, EditProduct, GetAProduct, GetProducts } from "./controller/productController.js";
+import { AddProduct, DeleteProduct, EditProduct, GetAProduct, GetProducts, GetSellerProducts } from "./controller/productController.js";
 import { AddToCart, GetCartList } from "./controller/cartController.js";
 import { CancelOrder, CreateOrder, CreateOrderFromCart } from "./controller/orderController.js";
 import { Payment } from "./controller/paymentController.js";
 import { sellerMiddleware } from "./middleware/sellerMiddleware.js";
+import { GetDeliveryTracking, GetDeliveryTrackingByOrder } from "./controller/deliveryController.js";
 
 const app = express();
 
@@ -32,7 +33,7 @@ app.post("/api/v1/register/seller", validate(Schema.register),RegisterAsSeller);
 // ========================= User & Profile =========================
 
 // Add Profile Picture
-app.post("/api/v1/profile-picture", verifyToken, uploadprofile.single("profile"), validate(Schema.profile), AddProfile);
+app.post("/api/v1/profile-picture", verifyToken, uploadprofile.single("profile"), AddProfile);
 
 // Get A Profile
 app.get("/api/v1/profile", verifyToken, GetProfile);
@@ -44,6 +45,9 @@ app.put("/api/v1/profile", verifyToken, uploadprofile.single("profile"), validat
 
 // Get All Product
 app.get("/api/v1/products", verifyToken, GetProducts);
+
+// Get Seller's Products
+app.get("/api/v1/seller-products", verifyToken, sellerMiddleware, GetSellerProducts)
 
 // Get A Specific Product
 app.get("/api/v1/product/:id", verifyToken, GetAProduct);
@@ -77,10 +81,16 @@ app.post("/api/v1/order/partial", verifyToken, CreateOrderFromCart);
 app.put("/api/v1/order/:id/cancel", verifyToken, CancelOrder);
 
 //  ========================= Transaction =========================
-app.post("/api/v1/payments", verifyToken, Payment);
+
+app.put("/api/v1/payments", verifyToken, Payment);
 
 //  ========================= Delivery =========================
 
+// Tracking All Delivery From Customer
+app.get("/api/v1/order-tracking", verifyToken, GetDeliveryTracking);
+
+// Tracking Delivery From Customer By Order
+app.get("/api/v1/order-tracking/:id", verifyToken, GetDeliveryTrackingByOrder);
 
 app.listen(3000, () => {
   console.log(`JatiLuxe activated on port 3000`);

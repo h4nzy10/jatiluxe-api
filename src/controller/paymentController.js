@@ -1,4 +1,5 @@
 import pool from "../config/config.js";
+import { createDeliveryForOrder } from "../helper/delivery.js";
 
 export async function Payment(req, res) {
   const { id_order, payment_method } = req.body;
@@ -14,9 +15,9 @@ export async function Payment(req, res) {
     await conn.beginTransaction();
 
     const [rows] = await conn.execute(
-      `SELECT p.id_payment, p.id_order, p.payment_status, p.pay_date, p.payment_method,
-              o.id_customer, o.total_price
-       FROM payments p
+      `SELECT p.id_payment, p.id_order, p.payment_status,
+              o.id_customer, o.order_status
+       FROM payment p
        JOIN orders o ON o.id_order = p.id_order
        WHERE p.id_order = ?
        FOR UPDATE`,
@@ -35,21 +36,23 @@ export async function Payment(req, res) {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    if (payment.payment_status === "Paid off" || payment.payment_status === "paid" || payment.payment_status === "lunas") {
+    if (payment.order_status === "Canceled") {
       await conn.rollback();
-      return res.status(409).json({
-        message: "Payment already completed",
-        payment: { id_payment: payment.id_payment, id_order: payment.id_order, payment_status: payment.payment_status },
-      });
+      return res.status(409).json({ message: "Order is canceled" });
     }
 
-    if (payment.payment_status !== "Waiting for payment" && payment.payment_status !== "pending") {
+    if (["Paid off"].includes(payment.payment_status)) {
+      await conn.rollback();
+      return res.status(409).json({ message: "Payment already completed" });
+    }
+
+    if (!["Waiting for payment"].includes(payment.payment_status)) {
       await conn.rollback();
       return res.status(409).json({ message: `Cannot process payment: ${payment.payment_status}` });
     }
 
     const [result] = await conn.execute(
-      `UPDATE payments
+      `UPDATE payment
        SET payment_status = 'Paid off', payment_method = ?, pay_date = NOW()
        WHERE id_payment = ? AND payment_status = ?`,
       [payment_method, payment.id_payment, payment.payment_status],
@@ -60,6 +63,9 @@ export async function Payment(req, res) {
       return res.status(409).json({ message: "Payment status has changed!" });
     }
 
+    await conn.execute("UPDATE orders SET order_status = 'Process' WHERE id_order = ?", [idOrder]);
+    const delivery = await createDeliveryForOrder(conn, idOrder);
+
     await conn.commit();
     return res.status(200).json({
       success: true,
@@ -68,8 +74,9 @@ export async function Payment(req, res) {
         id_payment: payment.id_payment,
         id_order: payment.id_order,
         payment_status: "Paid off",
-        payment_method: payment_method,
+        payment_method,
       },
+      delivery,
     });
   } catch (error) {
     if (conn) await conn.rollback().catch(() => {});

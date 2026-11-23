@@ -25,10 +25,6 @@ export const Schema = {
     password: requiredString().min(6).optional(),
     no_hp: requiredString().optional(),
     alamat: requiredString().optional(),
-    profile: requiredString().optional(),
-  }),
-  profile: z.object({
-    profile: requiredString("profile")
   }),
   login: z.object({
     email: requiredString("email").email("email invalid"),

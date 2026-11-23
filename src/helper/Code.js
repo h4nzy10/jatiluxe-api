@@ -9,4 +9,3 @@ export function generateCode(prefix = "", digitLength = 13) {
 
   return `${prefix}${digits}`;
 }
-console.log(generateCode("JTX", 10))

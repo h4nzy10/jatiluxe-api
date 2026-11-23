@@ -13,6 +13,7 @@ export async function AddProfile(req, res) {
       "UPDATE users SET profile = ? WHERE id_user = ?",
       [profileUrl, req.user.id],
     );
+    
 
     if (result.affectedRows === 0) {
       return res.status(404).json({

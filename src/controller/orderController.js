@@ -84,8 +84,8 @@ async function decreaseProductStock(conn, orderItems) {
 
 async function createPendingPayment(conn, idOrder) {
   const [paymentInserted] = await conn.execute(
-    `INSERT INTO payments (id_order, pay_date, payment_method, payment_status)
-     VALUES (?, NULL, NULL, 'pending')`,
+    `INSERT INTO payment (id_order, pay_date, payment_method, payment_status)
+     VALUES (?, NULL, '-', 'Waiting for payment')`,
     [idOrder],
   );
   return paymentInserted.insertId;
@@ -132,7 +132,7 @@ export async function CreateOrder(req, res) {
       success: true,
       message: "Order berhasil dibuat",
       order: { id_order: idOrder, order_date: orderDate, total_price: total, items: orderItems },
-      payment: { id_payment: paymentId, id_order: idOrder, payment_status: "pending" },
+      payment: { id_payment: paymentId, id_order: idOrder, payment_status: "Waiting for payment" },
     });
   } catch (error) {
     if (conn) await conn.rollback().catch(() => {});
@@ -154,12 +154,12 @@ export async function CreateOrderFromCart(req, res) {
   try {
     const { selected_cart_ids } = req.body;
     if (!Array.isArray(selected_cart_ids) || selected_cart_ids.length === 0) {
-      return res.status(400).json({ success: false, message: "Tidak ada item yang dipilih untuk checkout" });
+      return res.status(400).json({ success: false, message: "Choose at least 1 product" });
     }
 
     const cleanCartIds = selected_cart_ids.filter((id) => id !== undefined && id !== null);
     if (cleanCartIds.length !== selected_cart_ids.length) {
-      return res.status(400).json({ success: false, message: "Terdapat ID keranjang yang tidak valid (undefined/null)" });
+      return res.status(400).json({ success: false, message: "Cart ID Invalid" });
     }
 
     conn = await pool.getConnection();
@@ -174,7 +174,6 @@ export async function CreateOrderFromCart(req, res) {
        WHERE c.customer_id = ? AND ci.cart_detail_id IN (${placeholders})`,
       [req.user.id, ...selected_cart_ids],
     );
-
     if (cartItems.length !== selected_cart_ids.length) {
       await conn.rollback();
       return res.status(400).json({ success: false, message: "Some products on your cart is not found" });
@@ -213,7 +212,7 @@ export async function CreateOrderFromCart(req, res) {
       success: true,
       message: "Order successfuly created",
       order: { id_order: idOrder, order_date: orderDate, total_price: total, items: orderItems },
-      payment: { id_payment: paymentId, id_order: idOrder, payment_status: "pending" },
+      payment: { id_payment: paymentId, id_order: idOrder, payment_status: "Waiting for payment" },
     });
   } catch (error) {
     if (conn) await conn.rollback().catch(() => {});
@@ -262,6 +261,9 @@ export async function CancelOrder(req, res) {
     if (order.order_status === "Canceled") {
       await conn.rollback();
       return res.status(409).json({ success: false, message: "Order already canceled" });
+    } else if (order.order_status === "Finished") {
+      await conn.rollback();
+      return res.status(409).json({ success: false, message: "Order cannot be canceled when order is finished" });
     }
 
     const [result] = await conn.execute(

@@ -126,3 +126,27 @@ export async function DeleteProduct(req, res) {
     });
   }
 }
+
+export async function GetSellerProducts(req, res) {
+  try {
+    const [products] = await pool.query(
+      "SELECT p.id_product, c.category, u.nama, p.product_name, p.wood_type, p.price, p.stock, p.description, p.picture FROM products p JOIN categories c ON c.id_category = p.id_category JOIN users u ON u.id_user = p.id_user WHERE p.id_user = ?;",
+      [req.user.id],
+    );
+
+    if (!products.length) {
+      return res.status(404).json({ error: "Product is empty" });
+    }
+
+    return res.status(200).json({
+      message: "successfuly get products",
+      products: products,
+    });
+  } catch (error) {
+    console.error("Failed to get products:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error.",
+    });
+  }
+}
