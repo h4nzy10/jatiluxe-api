@@ -290,3 +290,55 @@ export async function CancelOrder(req, res) {
     conn?.release();
   }
 }
+
+export async function GetOrders(req, res) {
+  try {
+    const [orders] = await pool.execute(
+      `SELECT o.id_order, o.order_date, o.total_price, o.order_status,
+              p.payment_status, d.delivery_status
+       FROM orders o
+       LEFT JOIN payment p ON p.id_order = o.id_order
+       LEFT JOIN delivery d ON d.id_order = o.id_order
+       WHERE o.id_customer = ?
+       ORDER BY o.order_date DESC`,
+      [req.user.id],
+    );
+    return res.status(200).json({ success: true, orders });
+  } catch (error) {
+    console.error("Failed to get orders:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
+export async function GetOrderById(req, res) {
+  const idOrder = Number(req.params.id);
+  if (!Number.isInteger(idOrder) || idOrder <= 0) {
+    return res.status(400).json({ success: false, message: "Invalid order id" });
+  }
+
+  try {
+    const [rows] = await pool.execute(
+      `SELECT o.id_order, o.order_date, o.total_price, o.order_status,
+              p.payment_status, p.payment_method, d.delivery_status, d.tracking_number
+       FROM orders o
+       LEFT JOIN payment p ON p.id_order = o.id_order
+       LEFT JOIN delivery d ON d.id_order = o.id_order
+       WHERE o.id_order = ? AND o.id_customer = ?`,
+      [idOrder, req.user.id],
+    );
+    if (!rows.length) return res.status(404).json({ success: false, message: "Order not found" });
+
+    const [items] = await pool.execute(
+      `SELECT od.id_product, pr.product_name, od.quantity, od.subtotal
+       FROM order_detail od
+       JOIN products pr ON pr.id_product = od.id_product
+       WHERE od.id_order = ?`,
+      [idOrder],
+    );
+
+    return res.status(200).json({ success: true, order: { ...rows[0], items } });
+  } catch (error) {
+    console.error("Failed to get order detail:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+}

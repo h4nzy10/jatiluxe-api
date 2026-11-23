@@ -27,5 +27,14 @@ const product = new CloudinaryStorage({
   },
 });
 
+const deliveryProof = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: "delivery-proof",
+    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+  },
+});
+
 export const uploadprofile = multer({ storage: profile });
 export const uploadProduct = multer({ storage: product });
+export const uploadDeliveryProof = multer({ storage: deliveryProof });

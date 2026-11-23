@@ -2,9 +2,17 @@ import pool from "../config/config.js"
 
 export async function GetProducts(req, res) {
   try {
-    const [products] = await pool.query(
-      "SELECT p.id_product, c.category, u.nama, p.product_name, p.wood_type, p.price, p.stock, p.description, p.picture FROM products p JOIN categories c ON c.id_category = p.id_category JOIN users u ON u.id_user = p.id_user;",
-    );
+    const { search } = req.query;
+    let query = "SELECT p.id_product, c.category, u.nama, p.product_name, p.wood_type, p.price, p.stock, p.description, p.picture FROM products p JOIN categories c ON c.id_category = p.id_category JOIN users u ON u.id_user = p.id_user";
+    const params = [];
+
+    if (search) {
+      query += " WHERE p.product_name LIKE ? OR p.wood_type LIKE ? OR c.category LIKE ?";
+      const keyword = `%${search}%`;
+      params.push(keyword, keyword, keyword);
+    }
+
+    const [products] = await pool.query(query, params);
     if (!products.length) {
       return res.status(404).json({ error: "Product is empty" });
     }
