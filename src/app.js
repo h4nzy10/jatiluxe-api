@@ -1,5 +1,4 @@
 import express from "express";
-import pool from "./config/config.js";
 import cors from "cors";
 import "dotenv/config";
 import { verifyToken } from "./middleware/Auth.js";
@@ -7,7 +6,7 @@ import { uploadprofile, uploadProduct, uploadDeliveryProof } from "./middleware/
 import { Schema, validate } from "./validator/Validator.js";
 import { Login, Register, RegisterAsSeller } from "./controller/authController.js";
 import { AddProfile, EditProfile, GetProfile } from "./controller/UserProfileController.js";
-import { AddProduct, DeleteProduct, EditProduct, GetAProduct, GetProducts, GetSellerProducts } from "./controller/productController.js";
+import { AddProduct, DeleteProduct, EditProduct, GetAProduct, GetCategories, GetProducts, GetSellerProducts } from "./controller/productController.js";
 import { AddToCart, DeleteCartItem, GetCartList, UpdateCartItem } from "./controller/cartController.js";
 import { CancelOrder, CreateOrder, CreateOrderFromCart, GetOrderById, GetOrders } from "./controller/orderController.js";
 import { CancelPayment, GetSales, GetTransactionDetail, Payment } from "./controller/paymentController.js";
@@ -42,6 +41,9 @@ app.get("/api/v1/profile", verifyToken, GetProfile);
 app.put("/api/v1/profile", verifyToken, uploadprofile.single("profile"), validate(Schema.editProfile), EditProfile);
 
 //  ========================= Product =========================
+
+// Get All Categories
+app.get("/api/v1/categories", verifyToken, GetCategories);
 
 // Get All Product
 app.get("/api/v1/products", verifyToken, GetProducts);
