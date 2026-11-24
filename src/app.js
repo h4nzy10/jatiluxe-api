@@ -56,7 +56,7 @@ app.get("/api/v1/product/:id", verifyToken, GetAProduct);
 app.post("/api/v1/product", verifyToken, sellerMiddleware, uploadProduct.single("picture"), validate(Schema.product), AddProduct);
 
 // Edit A Product
-app.put("/api/v1/product/:id", verifyToken, sellerMiddleware, validate(Schema.product), EditProduct);
+app.put("/api/v1/product/:id", verifyToken, sellerMiddleware, uploadProduct.single("picture"), validate(Schema.product), EditProduct);
 
 // Delete A Product
 app.delete("/api/v1/product/:id", verifyToken, sellerMiddleware, DeleteProduct);
