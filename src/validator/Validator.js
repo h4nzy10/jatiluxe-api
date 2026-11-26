@@ -23,6 +23,7 @@ export const Schema = {
     nama: requiredString().optional(),
     email: requiredString().optional(),
     password: requiredString().min(6).optional(),
+    current_password: requiredString().optional(),
     no_hp: requiredString().optional(),
     alamat: requiredString().optional(),
   }),

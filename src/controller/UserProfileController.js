@@ -57,7 +57,7 @@ export async function GetProfile(req, res) {
 
 export async function EditProfile(req, res) {
   const userId = req.user.id;
-  const { nama, email, password, no_hp, alamat, profile } = req.body;
+  const { nama, email, password, current_password, no_hp, alamat, profile } = req.body;
 
   let fields = [];
   let values = [];
@@ -86,10 +86,49 @@ export async function EditProfile(req, res) {
     fields.push("profile = ?");
     values.push(profile);
   }
-  values.push(userId);
-  try {
-    const query = `UPDATE users SET ${fields.join(", ")} WHERE id_user = ?`;
 
+  if (password !== undefined) {
+    if (current_password === undefined || String(current_password).trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Kata sandi saat ini wajib diisi untuk mengubah kata sandi.",
+      });
+    }
+  }
+
+  if (fields.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: "Tidak ada data profil yang diubah.",
+    });
+  }
+
+  try {
+    // Verify the current password against the database, not the JWT payload,
+    // so a changed/stale token cannot be used to overwrite the password.
+    if (password !== undefined) {
+      const [users] = await pool.query(
+        "SELECT password FROM users WHERE id_user = ?",
+        [userId],
+      );
+
+      if (!users.length) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found.",
+        });
+      }
+
+      if (String(users[0].password) !== String(current_password)) {
+        return res.status(403).json({
+          success: false,
+          message: "Kata sandi saat ini tidak benar.",
+        });
+      }
+    }
+
+    values.push(userId);
+    const query = `UPDATE users SET ${fields.join(", ")} WHERE id_user = ?`;
     const [result] = await pool.execute(query, values);
 
     if (result.affectedRows === 0) {
