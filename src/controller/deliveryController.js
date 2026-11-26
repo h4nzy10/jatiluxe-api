@@ -7,6 +7,35 @@ const trackingQuery = `
   JOIN orders o ON o.id_order = d.id_order
 `;
 
+// Seller: list all deliveries for orders containing their products
+export async function GetSellerDeliveries(req, res) {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT
+         d.id_delivery, d.id_order, d.tracking_number, d.delivery_status,
+         o.order_status, o.order_date, o.total_price,
+         u.nama AS customer_name,
+         da.id_apply, da.proof, da.status AS apply_status,
+         GROUP_CONCAT(pr.product_name SEPARATOR ', ') AS products_summary
+       FROM delivery d
+       JOIN orders o ON o.id_order = d.id_order
+       JOIN users u ON u.id_user = o.id_customer
+       JOIN order_detail od ON od.id_order = o.id_order
+       JOIN products pr ON pr.id_product = od.id_product AND pr.id_user = ?
+       LEFT JOIN delivery_apply da ON da.id_order = d.id_order AND da.id_seller = ?
+       GROUP BY d.id_delivery, d.id_order, d.tracking_number, d.delivery_status,
+                o.order_status, o.order_date, o.total_price,
+                u.nama, da.id_apply, da.proof, da.status
+       ORDER BY d.id_delivery DESC`,
+      [req.user.id, req.user.id]
+    );
+    return res.status(200).json({ success: true, deliveries: rows });
+  } catch (error) {
+    console.error("Failed to get seller deliveries:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+}
+
 export async function GetDeliveryTracking(req, res) {
   try {
     const [deliveries] = await pool.execute(

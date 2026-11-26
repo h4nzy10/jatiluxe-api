@@ -11,7 +11,7 @@ import { AddToCart, DeleteCartItem, GetCartList, UpdateCartItem } from "./contro
 import { CancelOrder, CreateOrder, CreateOrderFromCart, GetOrderById, GetOrders } from "./controller/orderController.js";
 import { CancelPayment, GetSales, GetTransactionDetail, Payment } from "./controller/paymentController.js";
 import { sellerMiddleware } from "./middleware/sellerMiddleware.js";
-import { ConfirmDelivery, FinishDeliveryApply, GetDeliveryApply, GetDeliveryTracking, GetDeliveryTrackingByOrder, UpdateDeliveryStatus } from "./controller/deliveryController.js";
+import { ConfirmDelivery, FinishDeliveryApply, GetDeliveryApply, GetDeliveryTracking, GetDeliveryTrackingByOrder, GetSellerDeliveries, UpdateDeliveryStatus } from "./controller/deliveryController.js";
 
 const app = express();
 
@@ -108,6 +108,9 @@ app.get("/api/v1/payments/:id", verifyToken, GetTransactionDetail);
 app.get("/api/v1/sales", verifyToken, sellerMiddleware, GetSales);
 
 //  ========================= Delivery =========================
+
+// Get Seller Deliveries (seller's own orders)
+app.get("/api/v1/seller-deliveries", verifyToken, sellerMiddleware, GetSellerDeliveries);
 
 // Tracking All Delivery From Customer
 app.get("/api/v1/order-tracking", verifyToken, GetDeliveryTracking);
