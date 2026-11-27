@@ -38,6 +38,10 @@ export const Schema = {
     no_hp: requiredString("no_hp"),
     alamat: requiredString("alamat"),
   }),
+  upgradeSeller: z.object({
+    email: requiredString("email").email("email invalid"),
+    password: requiredString("password"),
+  }),
   product: z.object({
     id_category: z.coerce.number().int().positive(),
     product_name: requiredString("product name"),

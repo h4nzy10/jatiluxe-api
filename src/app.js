@@ -4,7 +4,7 @@ import "dotenv/config";
 import { verifyToken } from "./middleware/Auth.js";
 import { uploadprofile, uploadProduct, uploadDeliveryProof } from "./middleware/Cloudinary.js";
 import { Schema, validate } from "./validator/Validator.js";
-import { Login, Register, RegisterAsSeller } from "./controller/authController.js";
+import { Login, Register, RegisterAsSeller, UpgradeToSeller } from "./controller/authController.js";
 import { AddProfile, EditProfile, GetProfile } from "./controller/UserProfileController.js";
 import { AddProduct, DeleteProduct, EditProduct, GetAProduct, GetCategories, GetProducts, GetSellerProducts } from "./controller/productController.js";
 import { AddToCart, DeleteCartItem, GetCartList, UpdateCartItem } from "./controller/cartController.js";
@@ -28,6 +28,9 @@ app.post("/api/v1/register", validate(Schema.register),Register);
 
 // Register As Seller
 app.post("/api/v1/register/seller", validate(Schema.register),RegisterAsSeller);
+
+// Upgrade the logged-in customer account to a seller account
+app.put("/api/v1/account/upgrade-seller", verifyToken, validate(Schema.upgradeSeller), UpgradeToSeller);
 
 // ========================= User & Profile =========================
 
