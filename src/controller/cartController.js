@@ -43,7 +43,7 @@ export async function AddToCart(req, res) {
 export async function GetCartList(req, res) {
   try {
     const [cartItems] = await pool.query(
-      `SELECT c.cart_id, d.cart_detail_id, p.product_name, p.price, d.quantity, (p.price * d.quantity) AS subtotal
+      `SELECT c.cart_id, d.cart_detail_id, d.product_id, p.product_name, p.price, p.picture, d.quantity, (p.price * d.quantity) AS subtotal
        FROM cart c
        JOIN cart_detail d ON c.cart_id = d.cart_id
        JOIN products p ON d.product_id = p.id_product
